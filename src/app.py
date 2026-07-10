@@ -1,0 +1,443 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+import os
+
+def export_to_excel(df, filepath="results/schedules/jadwal_piket_jt_express.xlsx"):
+    """Export jadwal ke Excel dengan formatting yang menarik"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    import os
+    
+    # Pastikan folder ada
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    # Buat workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Jadwal Piket J&T"
+    
+    # Definisi warna dan style
+    header_fill = PatternFill(start_color="1f4e79", end_color="1f4e79", fill_type="solid")  # Biru gelap
+    header_font = Font(color="FFFFFF", bold=True, size=12)  # Putih, bold
+    libur_fill = PatternFill(start_color="ffcccc", end_color="ffcccc", fill_type="solid")  # Merah muda
+    piket_fill = PatternFill(start_color="ccffcc", end_color="ccffcc", fill_type="solid")  # Hijau muda
+    locked_fill = PatternFill(start_color="e0e0e0", end_color="e0e0e0", fill_type="solid")  # Abu-abu
+    libur_font = Font(color="FF0000", bold=True)  # Merah, bold
+    piket_font = Font(color="008000")  # Hijau
+    locked_font = Font(color="808080", italic=True)  # Abu-abu
+    
+    # Border tipis
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Tulis header
+    for col_num, header in enumerate(df.columns, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = thin_border
+    
+    # Tulis data
+    for row_num, row in enumerate(df.values, 2):
+        for col_num, value in enumerate(row, 1):
+            cell = ws.cell(row=row_num, column=col_num, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+            
+            # Apply formatting berdasarkan nilai
+            if value == 'LIBUR':
+                cell.fill = libur_fill
+                cell.font = libur_font
+            elif value == 'PIKET':
+                cell.fill = piket_fill
+                cell.font = piket_font
+            elif 'LOCKED' in str(value):
+                cell.fill = locked_fill
+                cell.font = locked_font
+    
+    # Auto-width columns
+    for column in ws.columns:
+        max_length = 0
+        column = [cell for cell in column]
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column[0].column_letter].width = adjusted_width
+    
+    # Simpan file
+    wb.save(filepath)
+    return filepath
+
+def save_to_csv(df, filepath="data/raw/dataset.csv"):
+    """Menyimpan DataFrame ke file CSV secara permanen"""
+    try:
+        # Pastikan folder ada
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        df.to_csv(filepath, index=False)
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan file: {str(e)}")
+        return False
+
+# --- KONFIGURASI PATH AGAR IMPORT BERHASIL ---
+# Menambahkan root folder ke sys.path agar bisa mengimport modul dari folder src/
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.preprocessing.matrix_builder import MatrixBuilder
+from src.genetic_algorithm.genetic_engine import GeneticAlgorithm
+
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(
+    page_title="Sistem Automatic Scheduling J&T Express",
+    page_icon="🚚",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- INISIALISASI SESSION STATE ---
+if "df_karyawan" not in st.session_state:
+    st.session_state.df_karyawan = pd.DataFrame()
+if "hasil_jadwal" not in st.session_state:
+    st.session_state.hasil_jadwal = None
+if "ga_history" not in st.session_state:
+    st.session_state.ga_history = []
+
+# --- FUNGSI LOAD DATA AWAL ---
+@st.cache_data
+def load_data_csv():
+    # Path sesuai struktur folder yang kita buat
+    path = "data/raw/dataset.csv"
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return None
+
+# --- SIDEBAR (PARAMETER ALGORITMA) ---
+st.sidebar.title("️ Parameter Algoritma Genetika")
+st.sidebar.markdown("---")
+
+pop_size = st.sidebar.slider("Ukuran Populasi", 50, 300, 100, 10)
+generations = st.sidebar.slider("Jumlah Generasi", 100, 1000, 500, 50)
+mutation_rate = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1, 0.01)
+min_piket = st.sidebar.number_input("Min. Karyawan Piket/Hari", 1, 20, 5)
+
+st.sidebar.markdown("---")
+st.sidebar.info(" **J&T Express GSK08**\nSistem Penjadwalan Otomatis\nBerbasis Algoritma Genetika")
+
+# --- MAIN APP ---
+st.title("🚚 Sistem Automatic Scheduling J&T Express")
+st.caption("Perancangan Sistem Automatic Scheduling untuk Penjadwalan Libur dan Shift Piket Karyawan Menggunakan Metode Algoritma Genetika")
+
+# Membuat Tabs untuk memisahkan fungsi
+tab1, tab2, tab3 = st.tabs([" 1. Data Master (CRUD)", "🧬 2. Generate Jadwal", " 3. Hasil & Analisis"])
+
+# ==========================================
+# TAB 1: DATA MASTER (CRUD)
+# ==========================================
+with tab1:
+    st.header("Manajemen Data Karyawan")
+    
+    # Load data dari CSV jika session state masih kosong
+    if st.session_state.df_karyawan.empty:
+        raw_df = load_data_csv()
+        if raw_df is not None:
+            st.session_state.df_karyawan = raw_df
+            st.success(f"✅ Berhasil memuat {len(raw_df)} data karyawan dari `dataset_clean.csv`.")
+        else:
+            st.warning("⚠️ File `data/raw/dataset_clean.csv` tidak ditemukan. Silakan input manual.")
+            st.session_state.df_karyawan = pd.DataFrame(columns=["Kode Karyawan", "Nama", "Req Libur"])
+
+    st.write("### 📝 Edit Data Karyawan")
+    st.info("💡 **Petunjuk:** Anda dapat mengubah data, menambah baris baru (tombol `+`), atau menghapus baris langsung di tabel ini.")
+
+    edited_df = st.data_editor(
+        st.session_state.df_karyawan,
+        num_rows="dynamic",
+        width="stretch",
+        column_config={
+            "Kode Karyawan": st.column_config.TextColumn("Kode", width="small"),
+            "Nama": st.column_config.TextColumn("Nama Karyawan", width="medium"),
+            "Req Libur": st.column_config.SelectboxColumn(
+                "Permintaan Libur",
+                width="small",
+                options=["Bebas", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU", "SETIAP HARI"],
+                required=True
+            )
+        },
+        hide_index=True,
+        key="crud_editor"
+    )
+
+    # Statistik perubahan
+    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    with col_stats1:
+        st.metric("Total Karyawan", len(edited_df))
+    with col_stats2:
+        n_bebas = len(edited_df[edited_df['Req Libur'] == 'Bebas'])
+        st.metric("Preferensi Bebas", n_bebas)
+    with col_stats3:
+        n_spesifik = len(edited_df[edited_df['Req Libur'] != 'Bebas'])
+        st.metric("Preferensi Spesifik", n_spesifik)
+
+    st.markdown("---")
+    
+    # Tombol-tombol aksi
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("💾 Simpan Permanen ke CSV", type="primary", width="stretch"):
+            # Update session state
+            st.session_state.df_karyawan = edited_df
+            # Save ke file CSV
+            if save_to_csv(edited_df):
+                st.success("✅ Data berhasil disimpan permanen ke `dataset_clean.csv`!")
+                st.balloons()
+            else:
+                st.error("❌ Gagal menyimpan file.")
+    
+    with col2:
+        if st.button("💾 Simpan Sementara", width="stretch"):
+            # Hanya simpan di session state (tidak ke file)
+            st.session_state.df_karyawan = edited_df
+            st.info("ℹ️ Data disimpan di memori (akan hilang saat refresh)")
+    
+    with col3:
+        if st.button("🔄 Reload dari File", width="stretch"):
+            raw_df = load_data_csv()
+            if raw_df is not None:
+                st.session_state.df_karyawan = raw_df
+                st.success("✅ Data berhasil di-reload dari file CSV")
+                st.rerun()
+    
+    with col4:
+        if st.button("️ Reset Kosong", width="stretch"):
+            st.session_state.df_karyawan = pd.DataFrame(columns=["Kode Karyawan", "Nama", "Req Libur"])
+            st.warning("⚠️ Data di-reset ke kosong")
+
+    # Preview data yang akan disimpan
+    with st.expander("👁️ Preview Data (Perubahan Belum Tersimpan)"):
+        st.write("Berikut adalah data yang sedang Anda edit. Klik **'Simpan Permanen ke CSV'** untuk menyimpan perubahan.")
+        st.dataframe(edited_df, width="stretch")
+        
+        # Download button untuk backup
+        csv_backup = edited_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Backup CSV",
+            data=csv_backup,
+            file_name='backup_dataset_karyawan.csv',
+            mime='text/csv',
+        )
+
+# ==========================================
+# TAB 2: GENERATE JADWAL
+# ==========================================
+with tab2:
+    st.header("Eksekusi Algoritma Genetika")
+    
+    if st.session_state.df_karyawan.empty:
+        st.warning("⚠️ Data karyawan masih kosong. Silakan isi atau load data di Tab 1 terlebih dahulu.")
+    else:
+        st.write(f"Total Data Karyawan Aktif: **{len(st.session_state.df_karyawan)}**")
+        
+        # Preview Data yang akan diproses
+        with st.expander("Lihat Data yang akan diproses"):
+            st.dataframe(st.session_state.df_karyawan, width="stretch")
+
+        st.markdown("---")
+        st.write("### Konfigurasi Saat Ini")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Populasi", pop_size)
+        c2.metric("Generasi", generations)
+        c3.metric("Mutation Rate", f"{mutation_rate*100}%")
+        c4.metric("Min Piket/Hari", min_piket)
+
+        if st.button("🚀 MULAI GENERATE JADWAL", type="primary", use_container_width=True):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 🔥 PERBAIKAN DI SINI: Reset history menjadi List kosong sebelum GA mulai
+            st.session_state.ga_history = [] 
+            
+            try:
+                # 1. PREPROCESSING
+                status_text.text("⏳ Tahap 1: Preprocessing Data...")
+                builder = MatrixBuilder(st.session_state.df_karyawan)
+                df_ga, bobot_matrix, df_locked = builder.build_preference_matrix()
+                
+                # 2. INISIALISASI GA
+                status_text.text("🧬 Tahap 2: Inisialisasi Algoritma Genetika...")
+                ga = GeneticAlgorithm(
+                    df_karyawan=df_ga,
+                    bobot_matrix=bobot_matrix,
+                    karyawan_setiap_hari=df_locked,
+                    population_size=pop_size,
+                    generations=generations,
+                    mutation_rate=mutation_rate,
+                    min_piket_per_hari=min_piket
+                )
+
+                # 3. RUNNING GA
+                status_text.text("🧬 Tahap 3: Evolusi Generasi Berlangsung...")
+                
+                def update_progress(gen, best_fit, avg_fit):
+                    progress = gen / generations
+                    progress_bar.progress(progress)
+                    status_text.text(f"🧬 Generasi {gen}/{generations} | Best Fitness: {best_fit:.2f} | Avg: {avg_fit:.2f}")
+                    
+                    # Simpan history untuk grafik (karena ga_history sudah di-reset jadi List, .append() akan aman)
+                    if gen % 5 == 0: 
+                        st.session_state.ga_history.append({'Gen': gen, 'Best': best_fit, 'Avg': avg_fit})
+
+                best_chromosome = ga.run(callback=update_progress)
+                
+                # 4. SELESAI - Pindahkan history dari GA ke session state
+                progress_bar.progress(1.0)
+                status_text.text("✅ Algoritma Selesai! Menyiapkan hasil...")
+
+                # Simpan hasil jadwal (INDENTASI SUDAH DIPERBAIKI)
+                st.session_state.hasil_jadwal = ga.get_schedule_dataframe(best_chromosome)
+
+                # 🔥 PENTING: Pindahkan history dari GA object ke session state
+                if ga.history:
+                    st.session_state.ga_history = pd.DataFrame(ga.history)
+                    # Rename kolom agar sesuai dengan yang diharapkan di Tab 3
+                    st.session_state.ga_history = st.session_state.ga_history.rename(columns={
+                        'generation': 'Gen',
+                        'best_fitness': 'Best',
+                        'avg_fitness': 'Avg'
+                    })
+                else:
+                    st.session_state.ga_history = pd.DataFrame()
+
+                st.success(f"Jadwal berhasil digenerate! Fitness Score Terbaik: **{best_chromosome.fitness:.2f}**")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat menjalankan algoritma: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc()) # Menampilkan detail error jika ada
+
+# ==========================================
+# TAB 3: HASIL & ANALISIS
+# ==========================================
+with tab3:
+    st.header("Hasil Penjadwalan")
+    
+    # CEK APAKAH JADWAL SUDAH ADA DI SESSION STATE
+    if st.session_state.hasil_jadwal is None:
+        st.info("🕒 Belum ada jadwal yang digenerate. Silakan jalankan algoritma di Tab 2 terlebih dahulu.")
+    
+    else:
+        # ==========================================
+        # 1. TABEL HASIL
+        # ==========================================
+        st.subheader("📅 Tabel Jadwal Mingguan")
+        st.info("Keterangan: **LIBUR** (Merah), **PIKET** (Hijau), **PIKET (LOCKED)** (Abu-abu)")
+        
+        def highlight_schedule(val):
+            if val == 'LIBUR':
+                return 'background-color: #ffcccc; color: red; font-weight: bold;'
+            elif val == 'PIKET':
+                return 'background-color: #ccffcc; color: green;'
+            elif 'LOCKED' in str(val):
+                return 'background-color: #e0e0e0; color: gray;'
+            return ''
+
+        styled_df = st.session_state.hasil_jadwal.style.map(
+            highlight_schedule, 
+            subset=['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+        )
+        
+        st.dataframe(styled_df, width="stretch", height=600)
+
+        # ==========================================
+        # 2. STATISTIK DISTRIBUSI PIKET
+        # ==========================================
+        st.subheader("📊 Statistik Distribusi Piket")
+        hari_list = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+        stats = []
+        for hari in hari_list:
+            n_piket = len(st.session_state.hasil_jadwal[st.session_state.hasil_jadwal[hari].str.contains('PIKET')])
+            stats.append({'Hari': hari, 'Jumlah Piket': n_piket})
+        
+        stats_df = pd.DataFrame(stats)
+        
+        fig, ax = plt.subplots(figsize=(10, 5))
+        colors = ['#2ecc71' if x >= min_piket else '#e74c3c' for x in stats_df['Jumlah Piket']]
+        ax.bar(stats_df['Hari'], stats_df['Jumlah Piket'], color=colors)
+        ax.axhline(y=min_piket, color='blue', linestyle='--', label=f'Minimum Required ({min_piket})')
+        ax.set_title('Jumlah Karyawan Piket per Hari')
+        ax.set_ylabel('Jumlah Karyawan')
+        ax.legend()
+        st.pyplot(fig)
+
+        # ==========================================
+        # 3. GRAFIK KONVERGENSI FITNESS
+        # ==========================================
+        st.subheader("📈 Grafik Konvergensi Fitness")
+        if not st.session_state.ga_history.empty:
+            fig2, ax2 = plt.subplots(figsize=(10, 5))
+            ax2.plot(st.session_state.ga_history['Gen'], st.session_state.ga_history['Best'], label='Best Fitness', color='blue', linewidth=2)
+            ax2.plot(st.session_state.ga_history['Gen'], st.session_state.ga_history['Avg'], label='Average Fitness', color='orange', alpha=0.7, linestyle='--')
+            ax2.set_title('Konvergensi Algoritma Genetika')
+            ax2.set_xlabel('Generasi')
+            ax2.set_ylabel('Fitness Score')
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+            st.pyplot(fig2)
+        else:
+            st.warning("Data history konvergensi tidak tersedia.")
+
+        # ==========================================
+        # 4. EKSPOR DATA (HANYA MUNCUL JIKA HASIL ADA)
+        # ==========================================
+        st.subheader("📥 Ekspor Data")
+        st.markdown("Download hasil penjadwalan untuk laporan atau arsip.")
+        
+        col_dl1, col_dl2 = st.columns(2)
+        
+        with col_dl1:
+            # Tombol Download CSV
+            # Kita buat variabel csv di dalam blok else ini agar aman dari error NoneType
+            export_df = st.session_state.hasil_jadwal.copy()
+            csv = export_df.to_csv(index=False).encode('utf-8')
+            
+            st.download_button(
+                label="⬇️ Download Hasil (CSV)",
+                data=csv,
+                file_name='jadwal_piket_jt_express.csv',
+                mime='text/csv',
+                width="stretch"
+            )
+            
+        with col_dl2:
+            # Tombol Download Excel (Jika fungsi export_to_excel sudah dibuat)
+            try:
+                # Panggil fungsi export excel yang sudah kita buat sebelumnya
+                # Pastikan filepath sesuai atau biarkan default
+                filepath = "results/schedules/jadwal_piket_jt_express.xlsx"
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                export_to_excel(export_df, filepath)
+                
+                with open(filepath, "rb") as f:
+                    st.download_button(
+                        label="⬇️ Download Hasil (Excel .xlsx)",
+                        data=f,
+                        file_name='jadwal_piket_jt_express.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        width="stretch"
+                    )
+            except Exception as e:
+                st.error(f"Fitur Excel belum siap atau error: {e}")
