@@ -108,7 +108,7 @@ Aplikasi dibagi menjadi 3 Tab utama untuk memudahkan penggunaan:
 
 ## 👨‍💻 Penulis
 
-Dikembangkan oleh **Tim Sukses** sebagai bagian dari Tugas Akhir / Skripsi.
+Dikembangkan oleh **Opsional Team** sebagai bagian dari Tugas Akhir.
 - **Institusi:** Universitas Internasional Semen Indonesia
 - **Program Studi:** Informatika
 
