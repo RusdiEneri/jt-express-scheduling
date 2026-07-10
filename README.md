@@ -7,6 +7,8 @@
 ![OpenPyXL](https://img.shields.io/badge/Excel%20Export-OpenPyXL-green)
 ![License](https://img.shields.io/badge/License-Academic%20Use-orange)
 
+![](./ScreenshotFull.png)
+
 ## 📖 Tentang Proyek
 
 Proyek ini merupakan implementasi sistem penjadwalan otomatis untuk departemen GSK08 di J&T Express. Penjadwalan manual seringkali memakan waktu dan rentan terhadap pelanggaran aturan operasional maupun ketidakpuasan karyawan. 
