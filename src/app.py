@@ -114,6 +114,8 @@ if "hasil_jadwal" not in st.session_state:
     st.session_state.hasil_jadwal = None
 if "ga_history" not in st.session_state:
     st.session_state.ga_history = []
+if "show_balloons" not in st.session_state:
+    st.session_state.show_balloons = False
 
 # --- FUNGSI LOAD DATA AWAL ---
 @st.cache_data
@@ -149,18 +151,21 @@ tab1, tab2, tab3 = st.tabs([" 1. Data Master (CRUD)", "🧬 2. Generate Jadwal",
 with tab1:
     st.header("Manajemen Data Karyawan")
     
+    # 🔥 PERBAIKAN 1: Gunakan Absolute Path
+    CSV_PATH = os.path.abspath("data/raw/dataset.csv")
+    
     # Load data dari CSV jika session state masih kosong
     if st.session_state.df_karyawan.empty:
-        raw_df = load_data_csv()
-        if raw_df is not None:
+        if os.path.exists(CSV_PATH):
+            raw_df = pd.read_csv(CSV_PATH)
             st.session_state.df_karyawan = raw_df
-            st.success(f"✅ Berhasil memuat {len(raw_df)} data karyawan dari `dataset_clean.csv`.")
+            st.success(f"✅ Berhasil memuat {len(raw_df)} data karyawan.")
         else:
-            st.warning("⚠️ File `data/raw/dataset_clean.csv` tidak ditemukan. Silakan input manual.")
+            st.warning("⚠️ File dataset.csv tidak ditemukan. Silakan input manual.")
             st.session_state.df_karyawan = pd.DataFrame(columns=["Kode Karyawan", "Nama", "Req Libur"])
 
     st.write("### 📝 Edit Data Karyawan")
-    st.info("💡 **Petunjuk:** Anda dapat mengubah data, menambah baris baru (tombol `+`), atau menghapus baris langsung di tabel ini.")
+    st.info("💡 **PENTING UNTUK PENGGUNA HP:** Setelah mengedit sel, **ketuk area kosong di luar tabel** terlebih dahulu untuk menutup keyboard, baru kemudian klik tombol Simpan.")
 
     edited_df = st.data_editor(
         st.session_state.df_karyawan,
@@ -180,65 +185,50 @@ with tab1:
         key="crud_editor"
     )
 
-    # Statistik perubahan
-    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    # 🔥 PERBAIKAN 2: Alert Perubahan Data (Unsaved Changes)
+    df_asli = st.session_state.df_karyawan.reset_index(drop=True).fillna("__NAN__")
+    df_edit = edited_df.reset_index(drop=True).fillna("__NAN__")
+    
+    if not df_asli.equals(df_edit):
+        st.warning("⚠️ **Anda memiliki perubahan yang belum disimpan!** Jangan lupa klik tombol **💾 Simpan Permanen** di bawah agar data tidak hilang saat halaman di-refresh.", icon="🚨")
+
+    # Statistik
+    col_stats1, col_stats2 = st.columns(2)
     with col_stats1:
         st.metric("Total Karyawan", len(edited_df))
     with col_stats2:
-        n_bebas = len(edited_df[edited_df['Req Libur'] == 'Bebas'])
-        st.metric("Preferensi Bebas", n_bebas)
-    with col_stats3:
         n_spesifik = len(edited_df[edited_df['Req Libur'] != 'Bebas'])
-        st.metric("Preferensi Spesifik", n_spesifik)
+        st.metric("Req Spesifik", n_spesifik)
 
     st.markdown("---")
     
     # Tombol-tombol aksi
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("💾 Simpan Permanen ke CSV", type="primary", width="stretch"):
-            # Update session state
+        if st.button("💾 Simpan Permanen", type="primary", width="stretch"):
             st.session_state.df_karyawan = edited_df
-            # Save ke file CSV
-            if save_to_csv(edited_df):
-                st.success("✅ Data berhasil disimpan permanen ke `dataset_clean.csv`!")
-                st.balloons()
-            else:
-                st.error("❌ Gagal menyimpan file.")
+            try:
+                os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
+                edited_df.to_csv(CSV_PATH, index=False)
+                
+                st.toast("✅ Data berhasil disimpan permanen!", icon="💾")
+                # 🔥 PERBAIKAN 3: Set flag untuk balon, lalu rerun
+                st.session_state.show_balloons = True
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Gagal menyimpan: {str(e)}")
     
     with col2:
-        if st.button("💾 Simpan Sementara", width="stretch"):
-            # Hanya simpan di session state (tidak ke file)
-            st.session_state.df_karyawan = edited_df
-            st.info("ℹ️ Data disimpan di memori (akan hilang saat refresh)")
-    
-    with col3:
-        if st.button("🔄 Reload dari File", width="stretch"):
-            raw_df = load_data_csv()
-            if raw_df is not None:
-                st.session_state.df_karyawan = raw_df
-                st.success("✅ Data berhasil di-reload dari file CSV")
+        if st.button("🔄 Reset ke Awal", width="stretch"):
+            if os.path.exists(CSV_PATH):
+                st.session_state.df_karyawan = pd.read_csv(CSV_PATH)
                 st.rerun()
-    
-    with col4:
-        if st.button("️ Reset Kosong", width="stretch"):
-            st.session_state.df_karyawan = pd.DataFrame(columns=["Kode Karyawan", "Nama", "Req Libur"])
-            st.warning("⚠️ Data di-reset ke kosong")
 
-    # Preview data yang akan disimpan
-    with st.expander("👁️ Preview Data (Perubahan Belum Tersimpan)"):
-        st.write("Berikut adalah data yang sedang Anda edit. Klik **'Simpan Permanen ke CSV'** untuk menyimpan perubahan.")
-        st.dataframe(edited_df, width="stretch")
-        
-        # Download button untuk backup
-        csv_backup = edited_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Backup CSV",
-            data=csv_backup,
-            file_name='backup_dataset_karyawan.csv',
-            mime='text/csv',
-        )
+    # Tampilkan balon jika flag aktif (setelah rerun)
+    if st.session_state.get("show_balloons", False):
+        st.balloons()
+        st.session_state.show_balloons = False
 
 # ==========================================
 # TAB 2: GENERATE JADWAL
