@@ -65,7 +65,7 @@ cd jt-express-scheduling
 
 ### 2. Buat Virtual Environment (Sangat Disarankan)
 ```bash
-# Untuk Windows PowerShell
+# Untuk Windows Command Prompt
 python -m venv venv
 .\venv\Scripts\Activate
 
