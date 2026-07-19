@@ -38,7 +38,9 @@ class GeneticAlgorithm:
                  generations: int = 500,
                  mutation_rate: float = 0.1,
                  crossover_rate: float = 0.8,
-                 min_piket_per_hari: int = 5):
+                 min_piket_per_hari: int = 5,
+                 piket_per_minggu: int = 1,      # 🔥 BARU: Minimal piket per minggu
+                 piket_per_bulan: int = 4):      # 🔥 BARU: Target piket per bulan
         
         self.df_karyawan = df_karyawan
         self.bobot_matrix = bobot_matrix
@@ -48,6 +50,10 @@ class GeneticAlgorithm:
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.min_piket_per_hari = min_piket_per_hari
+        
+        # 🔥 BARU: Simpan parameter frekuensi piket
+        self.piket_per_minggu = piket_per_minggu
+        self.piket_per_bulan = piket_per_bulan
         
         self.n_karyawan = len(df_karyawan)
         self.n_hari = 7
@@ -79,7 +85,7 @@ class GeneticAlgorithm:
             else:
                 fitness -= abs(total_libur - 2) * 50
         
-        # 2. HARD CONSTRAINT: Cek minimum piket per hari
+        # 2. HARD CONSTRAINT: Cek minimum piket per hari (INDENTASI DIPERBAIKI)
         for day in range(self.n_hari):
             n_piket = np.sum(chromosome.schedule[:, day] == 0)
             n_piket += len(self.karyawan_setiap_hari)
@@ -88,6 +94,27 @@ class GeneticAlgorithm:
                 fitness += 50
             else:
                 fitness -= (self.min_piket_per_hari - n_piket) * 100
+        
+        # 🔥 BARU: CONSTRAINT FREKUENSI PIKET (Mingguan & Bulanan)
+        # 💡 CATATAN PENTING: Karena Hard Constraint #1 memaksa setiap karyawan 
+        # libur tepat 2 hari, maka otomatis setiap karyawan akan PIKET (schedule == 0) 
+        # selama 5 hari dalam seminggu. Ini secara alami sudah memenuhi syarat 
+        # "minimal 1x piket per minggu" dan "4x per bulan". 
+        # Namun, logic ini tetap kita tambahkan sebagai validasi eksplisit sesuai permintaan.
+        for i in range(self.n_karyawan):
+            # Hitung total hari piket dalam 1 minggu (7 hari)
+            n_piket_mingguan = np.sum(chromosome.schedule[i, :] == 0)
+            
+            # Validasi minimal piket per minggu
+            if n_piket_mingguan >= self.piket_per_minggu:
+                fitness += 30
+            else:
+                fitness -= (self.piket_per_minggu - n_piket_mingguan) * 80
+                
+            # Validasi target piket per bulan (dikonversi ke target mingguan: target / 4 minggu)
+            target_mingguan = self.piket_per_bulan / 4.0
+            if n_piket_mingguan >= target_mingguan:
+                fitness += 20
         
         # 3. SOFT CONSTRAINT: Preferensi libur karyawan
         for i in range(self.n_karyawan):
