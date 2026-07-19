@@ -1,3 +1,5 @@
+import pandas as pd  # 🔥 TAMBAHKAN BARIS INI DI PALING ATAS!
+
 class GeneticAlgorithm:
     def __init__(self, 
                  df_karyawan: pd.DataFrame,
