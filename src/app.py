@@ -5,6 +5,69 @@ import matplotlib.pyplot as plt
 import sys
 import os
 
+def generate_jadwal_off_and_piket(df_jadwal):
+    """
+    Memformat dataframe hasil GA menjadi 2 tabel:
+    1. Tabel Jadwal OFF (berisi nama yang libur, dikelompokkan per TIM)
+    2. Tabel Jadwal Piket (Setiap karyawan hanya muncul 1x, dibagi seimbang)
+    """
+    days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+    df = df_jadwal.copy()
+    
+    # Filter hanya karyawan reguler (bukan 'SETIAP HARI' / LOCKED)
+    df_reguler = df[~df['Senin'].str.contains('LOCKED', na=False)].copy()
+    
+    # Assign TIM (A-G) secara berurutan
+    tim_list = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    df_reguler['TIM'] = [tim_list[i % 7] for i in range(len(df_reguler))]
+
+    # ==========================================
+    # TABEL 1: JADWAL OFF (LIBUR) PER TIM
+    # ==========================================
+    off_matrix = pd.DataFrame(index=tim_list, columns=days).fillna('')
+    
+    for _, row in df_reguler.iterrows():
+        for day in days:
+            val = str(row[day]).strip()
+            if val == 'LIBUR':
+                current_val = off_matrix.loc[row['TIM'], day]
+                if current_val == '':
+                    off_matrix.loc[row['TIM'], day] = row['Nama']
+                else:
+                    off_matrix.loc[row['TIM'], day] = f"{current_val}, {row['Nama']}"
+
+    # ==========================================
+    # TABEL 2: JADWAL PIKET (BALANCED ASSIGNMENT)
+    # ==========================================
+    # Logika: Setiap karyawan hanya ditugaskan 1 hari piket untuk tabel ini.
+    # Kita pilih hari di mana mereka PIKET, dan hari tersebut masih sedikit orangnya.
+    
+    piket_assignment = {day: [] for day in days}
+    day_counts = {day: 0 for day in days} # Untuk melacak jumlah orang per hari
+    
+    for _, row in df_reguler.iterrows():
+        # Cari hari-hari dimana karyawan ini benar-benar PIKET
+        available_days = [day for day in days if str(row[day]).strip() == 'PIKET']
+        
+        if available_days:
+            # Pilih hari yang paling sedikit orangnya saat ini (Greedy balancing)
+            best_day = min(available_days, key=lambda d: day_counts[d])
+            
+            # Masukkan ke hari tersebut
+            piket_assignment[best_day].append(row['Nama'])
+            day_counts[best_day] += 1
+
+    # Buat DataFrame untuk tabel piket
+    max_piket_per_day = max(len(names) for names in piket_assignment.values()) if any(piket_assignment.values()) else 1
+    piket_matrix = pd.DataFrame(index=range(max_piket_per_day), columns=days).fillna('')
+    
+    for day in days:
+        # Masukkan nama-nama yang sudah dibagi seimbang
+        for i, name in enumerate(piket_assignment[day]):
+            piket_matrix.loc[i, day] = name
+    
+    return off_matrix, piket_matrix
+    
 def export_to_excel(df, filepath="results/schedules/jadwal_piket_jt_express.xlsx"):
     """Export jadwal ke Excel dengan formatting yang menarik"""
     from openpyxl import Workbook
@@ -134,6 +197,12 @@ pop_size = st.sidebar.slider("Ukuran Populasi", 50, 300, 100, 10)
 generations = st.sidebar.slider("Jumlah Generasi", 100, 1000, 500, 50)
 mutation_rate = st.sidebar.slider("Mutation Rate", 0.01, 0.5, 0.1, 0.01)
 min_piket = st.sidebar.number_input("Min. Karyawan Piket/Hari", 1, 20, 5)
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚖️ Batasan Frekuensi Piket")
+piket_per_minggu = st.sidebar.slider("Min. Piket per Minggu", 1, 3, 1)
+piket_per_bulan = st.sidebar.slider("Target Piket per Bulan", 3, 6, 4)
+
+st.sidebar.info(f"💡 Setiap karyawan harus piket minimal **{piket_per_minggu}x/minggu** dan target **{piket_per_bulan}x/bulan**")
 
 st.sidebar.markdown("---")
 st.sidebar.info(" **J&T Express GSK08**\nSistem Penjadwalan Otomatis\nBerbasis Algoritma Genetika")
@@ -275,7 +344,9 @@ with tab2:
                     population_size=pop_size,
                     generations=generations,
                     mutation_rate=mutation_rate,
-                    min_piket_per_hari=min_piket
+                    min_piket_per_hari=min_piket,
+                    piket_per_minggu=piket_per_minggu, 
+                    piket_per_bulan=piket_per_bulan 
                 )
 
                 # 3. RUNNING GA
@@ -351,6 +422,51 @@ with tab3:
         )
         
         st.dataframe(styled_df, width="stretch", height=600)
+
+                # ==========================================
+        # 🔥 FORMAT TABEL SEPERTI EXCEL (JADWAL OFF & PIKET)
+        # ==========================================
+        st.markdown("---")
+        
+        # Panggil fungsi yang baru
+        df_off, df_piket = generate_jadwal_off_and_piket(st.session_state.hasil_jadwal)
+
+        # --- TABEL 1: JADWAL OFF ---
+        st.subheader(" JADWAL OFF (LIBUR) PER TIM")
+        st.info("Sel berwarna merah menunjukkan karyawan yang LIBUR pada hari tersebut.")
+        
+        # Styling untuk Tabel OFF
+        def highlight_off(val):
+            if val != '':
+                return 'background-color: #ffcccc; color: red; font-weight: bold;'
+            return ''
+            
+        styled_off = df_off.style.map(highlight_off)
+        st.dataframe(styled_off, width="stretch", height=300)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- TABEL 2: JADWAL PIKET ---
+        st.subheader(" PIKET JAM 04.30 & 17.45")
+        st.info("Setiap karyawan piket **1 kali seminggu** (4x sebulan). Nama yang tertera adalah karyawan yang bertugas piket pada hari tersebut.")
+        
+        # Styling untuk Tabel Piket (Abu-abu seperti Excel)
+        def highlight_piket(val):
+            if val != '':
+                return 'background-color: #d9d9d9; color: black; font-weight: bold;'
+            return ''
+            
+        styled_piket = df_piket.style.map(highlight_piket)
+        st.dataframe(styled_piket, width="stretch", height=400)
+        
+        # Download button untuk format ini
+        st.download_button(
+            label="📥 Download Format Excel (CSV)",
+            data=df_piket.to_csv(index=False).encode('utf-8'),
+            file_name='jadwal_piket_jt_express.csv',
+            mime='text/csv',
+            width="stretch"
+        )
 
         # ==========================================
         # 2. STATISTIK DISTRIBUSI PIKET
