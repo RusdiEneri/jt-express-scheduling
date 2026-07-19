@@ -1,4 +1,7 @@
-import pandas as pd  # 🔥 TAMBAHKAN BARIS INI DI PALING ATAS!
+import numpy as np
+import random
+from typing import List, Tuple, Dict
+import pandas as pd
 
 class GeneticAlgorithm:
     def __init__(self, 
