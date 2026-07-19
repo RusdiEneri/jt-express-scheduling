@@ -209,7 +209,7 @@ st.sidebar.info(" **J&T Express GSK08**\nSistem Penjadwalan Otomatis\nBerbasis A
 
 # --- MAIN APP ---
 st.title("🚚 Sistem Automatic Scheduling J&T Express")
-st.caption("Perancangan Sistem Automatic Scheduling untuk Penjadwalan Libur dan Shift Piket Karyawan Menggunakan Metode Algoritma Genetika")
+st.caption("Perancangan Sistem Automatic Scheduling untuk Penjadwalan Shift Piket Karyawan Menggunakan Metode Algoritma Genetika")
 
 # Membuat Tabs untuk memisahkan fungsi
 tab1, tab2, tab3 = st.tabs([" 1. Data Master (CRUD)", "🧬 2. Generate Jadwal", " 3. Hasil & Analisis"])
