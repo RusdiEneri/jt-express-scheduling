@@ -201,9 +201,9 @@ class GeneticAlgorithm:
     
     def run(self, callback=None) -> Chromosome:
         """Main loop Genetic Algorithm"""
-        print("🔬 Memulai Genetic Algorithm...")
-        print(f"📊 Populasi: {self.population_size}, Generasi: {self.generations}")
-        print(f"👥 Karyawan: {self.n_karyawan} (+ {len(self.karyawan_setiap_hari)} locked)")
+        print("[GA] Memulai pencarian jadwal otomatis...")
+        print(f"[GA] Calon jadwal: {self.population_size}, Putaran: {self.generations}")
+        print(f"[GA] Karyawan biasa: {self.n_karyawan}, Terkunci: {len(self.karyawan_setiap_hari)}")
         
         # Inisialisasi populasi
         self.create_initial_population()
@@ -268,7 +268,7 @@ class GeneticAlgorithm:
                 print(f"Gen {generation + 1}/{self.generations} | "
                       f"Best: {self.best_fitness:.2f} | Avg: {avg_fitness:.2f}")
         
-        print(f"\n✅ Selesai! Best Fitness: {self.best_fitness:.2f}")
+        print(f"\n[GA] Selesai! Skor kualitas terbaik: {self.best_fitness:.2f}")
         
         # 🔥 Return harus sejajar dengan 'for generation' (di dalam method run)
         return self.best_chromosome
