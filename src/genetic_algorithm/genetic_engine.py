@@ -130,6 +130,18 @@ class GeneticAlgorithm:
             if deviation < 3:
                 fitness += 10
         
+        # 5. SOFT CONSTRAINT SC3: Pembatasan piket berturut-turut berlebihan (Paper Hal. 5 & Tabel 5)
+        # Beri penalti 15 jika ada karyawan yang bertugas piket 3 hari atau lebih secara berurutan
+        for i in range(self.n_karyawan):
+            consecutive_piket = 0
+            for day in range(self.n_hari):
+                if chromosome.schedule[i, day] == 0:  # 0 = PIKET
+                    consecutive_piket += 1
+                    if consecutive_piket >= 3:
+                        fitness -= 15
+                else:
+                    consecutive_piket = 0
+        
         return fitness
     
     def selection(self) -> Chromosome:
@@ -139,21 +151,26 @@ class GeneticAlgorithm:
         return max(tournament, key=lambda x: x.fitness)
     
     def crossover(self, parent1: Chromosome, parent2: Chromosome) -> Tuple[Chromosome, Chromosome]:
-        """Uniform Crossover"""
+        """Single Point Crossover (Sesuai Naskah Paper Hal. 6, Poin C.4)"""
         if random.random() > self.crossover_rate:
             return parent1.clone(), parent2.clone()
         
         child1 = Chromosome(self.n_karyawan, self.n_hari)
         child2 = Chromosome(self.n_karyawan, self.n_hari)
         
-        for i in range(self.n_karyawan):
-            for day in range(self.n_hari):
-                if random.random() < 0.5:
-                    child1.schedule[i, day] = parent1.schedule[i, day]
-                    child2.schedule[i, day] = parent2.schedule[i, day]
-                else:
-                    child1.schedule[i, day] = parent2.schedule[i, day]
-                    child2.schedule[i, day] = parent1.schedule[i, day]
+        total_genes = self.n_karyawan * self.n_hari
+        cut_point = random.randint(1, total_genes - 1)
+        
+        # Flatten schedule array untuk Single Point Cut
+        p1_flat = parent1.schedule.flatten()
+        p2_flat = parent2.schedule.flatten()
+        
+        # Potong dan tukar bagian belakang setelah titik potong (cut_point)
+        c1_flat = np.concatenate([p1_flat[:cut_point], p2_flat[cut_point:]])
+        c2_flat = np.concatenate([p2_flat[:cut_point], p1_flat[cut_point:]])
+        
+        child1.schedule = c1_flat.reshape((self.n_karyawan, self.n_hari))
+        child2.schedule = c2_flat.reshape((self.n_karyawan, self.n_hari))
         
         child1 = self.repair_chromosome(child1)
         child2 = self.repair_chromosome(child2)
