@@ -123,9 +123,9 @@ Proyek ini dibuat untuk tujuan akademis dan portofolio. Silakan gunakan dan modi
   <br/>
   <img src="https://img.shields.io/badge/✦%20Quote%20of%20the%20Day%20✦-7c3aed?style=flat-square&labelColor=1a1a2e" />
   <br/><br/>
-  <i>❝ Perasaan manusia itu terlalu rumit dan susah dimengerti. Tidak semua perasaan diungkapkan melalui kata-kata, ada kalanya manusia memiliki maksud lain atau niat kebohongan. ❞</i>
+  <i>❝ Tak peduli seberapa jauh kau terjatuh di dalam kegelapan, kau masih memiliki keberanian untuk mengulurkan tanganmu. ❞</i>
   <br/>
-  <sub>— <b>Violet Evergarden</b> · <i>Violet Evergarden</i></sub>
+  <sub>— <b>Rem</b> · <i>Re:Zero kara Hajimeru Isekai Seikatsu</i></sub>
   <br/><br/>
   <img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=6&height=2&width=60%" />
 </div>
