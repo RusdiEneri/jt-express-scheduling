@@ -123,9 +123,9 @@ Proyek ini dibuat untuk tujuan akademis dan portofolio. Silakan gunakan dan modi
   <br/>
   <img src="https://img.shields.io/badge/✦%20Quote%20of%20the%20Day%20✦-7c3aed?style=flat-square&labelColor=1a1a2e" />
   <br/><br/>
-  <i>❝ Datang ke tempatmu sudah cukup untuk menyembuhkan satu hatiku. ❞</i>
+  <i>❝ Kami percaya kalau semua yang diberikan pada kami itu sama seperti yang diberikan pada semua makhluk hidup di planet ini. ❞</i>
   <br/>
-  <sub>— <b>Yuuka Kobayakawa</b> · <i>Shoujo-tachi wa Kouya wo Mezasu</i></sub>
+  <sub>— <b>Nevin</b> · <i>Mahoutsukai no Yome</i></sub>
   <br/><br/>
   <img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=6&height=2&width=60%" />
 </div>
